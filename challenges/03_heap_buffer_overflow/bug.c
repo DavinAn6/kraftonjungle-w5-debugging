@@ -35,7 +35,15 @@
  * TODO: realloc 은 반드시 "새 용량(newcap)" 으로 호출하고, l->cap 갱신과 순서를 맞춰야 한다.
  *       (성장 로직은 '용량 필드'와 '실제 확보량'이 항상 같도록 유지해야 한다)
  */
-#include <stdio.h>
+
+/* 
+BUG FIX ----------------------------------------------------------------------------------------------
+    Before : int *p = realloc(l->data, l->cap * sizeof(int));
+    After : int *p = realloc(l->data, newcap * sizeof(int));
+    Need reallocating size to be updated capacity
+*/
+
+ #include <stdio.h>
 #include <stdlib.h>
 
 typedef struct {
@@ -52,30 +60,43 @@ typedef struct {
     size_t cap;
 } IntList;
 
+
 static void list_init(IntList *l) {
     l->cap  = 8;
     l->len  = 0;
-    l->data = malloc(l->cap * sizeof(int));
+    l->data = malloc(l->cap * sizeof(int)); 
+        // Allocate memory the size of (cap * 4byte)
     if (!l->data) { perror("malloc"); exit(1); }
+        // If l->data is null print error message and stops the entire program
+        // Asking "did the malloc that set l->data fail"
 }
+
 
 static void list_ensure(IntList *l, size_t need) {
-    if (need <= l->cap) return;
-
+    if (need <= l->cap) return;     // Space needed can stay inside capacity. Return
     size_t newcap = l->cap ? l->cap * 2 : 8;
+        // If l->cap not zero, double it. If l->cap zero, set to 8
     while (newcap < need) newcap *= 2;
-
-    int *p = realloc(l->data, l->cap * sizeof(int));
+        // If the doubled capacity is still less than the needed space,
+        // keep doubling
+    int *p = realloc(l->data, newcap * sizeof(int));
+        // realloc(pointer, new size)
     if (!p) { perror("realloc"); free(l->data); exit(1); }
-
+        // realloc returns NULL if failed (when there is not enough memory anywhere)
+        // If realloc failed, 
+        // 1) print error message 2) free previous malloc 3) exit entire program
     l->data = p;
     l->cap  = newcap;
+        // If realloc succeeded, update data and capacity
 }
+
 
 static void list_push(IntList *l, int x) {
     if (l->len == l->cap) list_ensure(l, l->cap + 1);
+        // If list length is equal to capacity, need to ensure space first
     l->data[l->len++] = x;
 }
+
 
 static long long list_sum(const IntList *l) {
     long long s = 0;
@@ -83,20 +104,22 @@ static long long list_sum(const IntList *l) {
     return s;
 }
 
+
 static void list_free(IntList *l) {
     free(l->data);
     l->data = NULL;
     l->len = l->cap = 0;
 }
 
+
 int main(void) {
-    IntList l;
-    list_init(&l);
+    IntList l;      // Creates a IntList struct
+    list_init(&l);  // Initializes the IntList attributes through method
 
     const int N = 2000000;
     for (int i = 0; i < N; i++) {
         list_push(&l, i % 100);        
-    }
+    }   // For i = 0 ~ 1,999,999 push the remainder when divided by 100 to list
 
     printf("len=%zu cap=%zu sum=%lld\n", l.len, l.cap, list_sum(&l));
     list_free(&l);
