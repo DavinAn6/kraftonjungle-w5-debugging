@@ -87,7 +87,7 @@ static void parse_headers(char *text, Headers *h) {
         */
 
         char *key = line;
-        char *val;
+        char *val = NULL;
         if (colon != NULL) {
             *colon = '\0'; 
             val = skip_ws(colon + 1); // char right after colon

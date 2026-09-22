@@ -39,6 +39,16 @@
  * TODO: 소유권은 한 곳만 갖게 한다. 예) by_id 를 "소유 인덱스"로 정하고 여기서만 해제,
  *       by_name 은 "관찰용(빌려온) 인덱스"로 두어 절대 free 하지 않는다.
  */
+
+
+
+/* 
+
+
+
+
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,45 +61,62 @@ typedef struct {
 #define MAXN 16
 typedef struct {
     Rec *by_id[MAXN];     
-    Rec *by_name[MAXN];    
+    Rec *by_name[MAXN];
+        // Creates an array of pointers to Rec
+        // by_id is an array of MAXN elements, and each element is a Rec *
     int  count;
 } Directory;
 
+
+// Function named rec_new that returns a Rec pointer
 static Rec *rec_new(int id, const char *name) {
-    Rec *r = malloc(sizeof *r);
-    if (!r) { perror("malloc"); exit(1); }
+    Rec *r = malloc(sizeof *r);             // Alocation memory for new Rec pointer
+    if (!r) { perror("malloc"); exit(1); }  // Check if malloc was successful
     r->id = id;
-    r->name = malloc(strlen(name) + 1);
+    r->name = malloc(strlen(name) + 1);     // Allocate memory for char array
     if (!r->name) { perror("malloc"); exit(1); }
-    strcpy(r->name, name);
+    strcpy(r->name, name);                  // Copies name argument to r->name
     return r;
 }
+
+
 
 static void directory_add(Directory *d, int id, const char *name) {
     Rec *r = rec_new(id, name);
     d->by_id[d->count]   = r;
     d->by_name[d->count] = r;      /* 같은 포인터를 두 인덱스에 함께 등록 */
     d->count++;
+    // Adds same Rec pointer to the two arrays
 }
+
+
 
 /* 이름 순 인덱스를 사전순으로 정렬(포인터만 재배치, 객체는 공유 그대로) */
 static void directory_sort_by_name(Directory *d) {
     for (int i = 0; i < d->count; i++) {
         for (int j = i + 1; j < d->count; j++) {
             if (strcmp(d->by_name[i]->name, d->by_name[j]->name) > 0) {
+                // Compare name at index i with all the names after index i
+                // Positive result means i comes after j (alphabetically, roughly)
+
                 Rec *t = d->by_name[i];
                 d->by_name[i] = d->by_name[j];
                 d->by_name[j] = t;
+                // Swap names at i and j
             }
         }
     }
 }
+
+
 
 static Rec *find_by_id(Directory *d, int id) {
     for (int i = 0; i < d->count; i++)
         if (d->by_id[i]->id == id) return d->by_id[i];
     return NULL;
 }
+
+
 
 static void directory_dump(Directory *d) {
     printf("by id:  ");
@@ -99,32 +126,36 @@ static void directory_dump(Directory *d) {
     printf("\n");
 }
 
+
+
 static void directory_free(Directory *d) {
     for (int i = 0; i < d->count; i++) {
         free(d->by_id[i]->name);
         free(d->by_id[i]);                 
     }
-    for (int i = 0; i < d->count; i++) {
-        free(d->by_name[i]);               
-    }
     d->count = 0;
 }
 
-int main(void) {
-    Directory dir = { .count = 0 };
 
+
+int main(void) {
+    Directory dir = { .count = 0 };     
+        // dir.count is set to 0
+        // dir.by_id and dir.by_name's element values are not explicitly listed and set to NULL
     directory_add(&dir, 3, "carol");
     directory_add(&dir, 1, "alice");
     directory_add(&dir, 4, "dave");
     directory_add(&dir, 2, "bob");
+        // dir : count = 4 / by_id = [3, 1, 4, 2] / by_name = ["carol",,, "bob"]
 
     directory_sort_by_name(&dir);
-    directory_dump(&dir);
+        // Only sorts d->by_name array
 
+    directory_dump(&dir);
     Rec *r = find_by_id(&dir, 2);
     if (r) printf("lookup id=2 -> %s\n", r->name);
-
-    directory_free(&dir);                  
+    directory_free(&dir);
+        // Stack shows error occurred here. Double free at tcache2, triggered SIGSEGV signal
     printf("done\n");
     return 0;
 }

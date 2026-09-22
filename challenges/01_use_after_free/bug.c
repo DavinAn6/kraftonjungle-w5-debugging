@@ -44,10 +44,18 @@
 
 typedef struct Widget Widget;
 
+
 typedef struct {
     void (*render)(Widget *self);
     void (*on_event)(Widget *self, int code);
 } VTable;
+/* 
+Function pointers
+    render takes widget pointer as paramter
+    on_event takes widget pointer and int as parameter
+No function assigned to the pointers yet
+*/
+
 
 struct Widget {
     const VTable *vtbl; 
@@ -62,6 +70,10 @@ typedef struct {
     int count;
 } Screen;
 
+
+
+
+
 /* ── 위젯 종류별 동작 ─────────────────────────────────────────── */
 static void button_render(Widget *self) {
     printf("  [Button #%d] \"%s\"\n", self->id, self->label);
@@ -73,8 +85,10 @@ static void dialog_render(Widget *self) {
     printf("  <<Dialog #%d>> %s\n", self->id, self->label);
 }
 
-static void widget_noop_event(Widget *self, int code) { (void)self; (void)code; }
 
+
+
+static void widget_noop_event(Widget *self, int code) { (void)self; (void)code; }
 /* 다이얼로그는 이벤트 코드 1(닫기)을 받으면 스스로 정리(파괴)된다 */
 static void dialog_on_event(Widget *self, int code);
 
@@ -82,8 +96,10 @@ static const VTable BUTTON_VT = { button_render, widget_noop_event };
 static const VTable LABEL_VT  = { label_render,  widget_noop_event };
 static const VTable DIALOG_VT = { dialog_render, dialog_on_event  };
 
-static Widget *widget_new(const VTable *vt, int id, const char *label) {
 
+
+
+static Widget *widget_new(const VTable *vt, int id, const char *label) {
     /* [Thinking Point]
     *   w 에 아직 아무 값도 넣지 않았는데, sizeof *w 로 *w 를 써도 괜찮은 이유는?
     *   tip 1. sizeof 는 피연산자를 '실행(역참조)'하지 않고 '타입'만 본다.
@@ -101,6 +117,7 @@ static Widget *widget_new(const VTable *vt, int id, const char *label) {
     return w;
 }
 
+
 static void widget_destroy(Widget *w) {
     free(w);          
 }
@@ -108,7 +125,9 @@ static void widget_destroy(Widget *w) {
 /* ── Screen ──────────────────────────────────────────────────── */
 static void screen_add(Screen *s, Widget *w) {
     if (s->count < MAX_WIDGETS) s->items[s->count++] = w;
-}
+} // If screen has count less than max capacity, increase count and add new widget to screen
+
+
 
 static void screen_dispatch(Screen *s, int code) {
     for (int i = 0; i < s->count; i++) {
@@ -120,9 +139,12 @@ static void screen_dispatch(Screen *s, int code) {
 static void screen_render(Screen *s) {
     for (int i = 0; i < s->count; i++) {
         Widget *w = s->items[i];
-        w->vtbl->render(w);      
+        w->vtbl->render(w);      // Crash happens here 
     }
 }
+
+
+
 
 static void dialog_on_event(Widget *self, int code) {
     if (code == 1) {
@@ -145,25 +167,50 @@ static char *app_build_status(const char *text) {
     return msg;
 }
 
+
+
+
 int main(void) {
     Screen s = { .count = 0 };
-
     screen_add(&s, widget_new(&LABEL_VT,  10, "Welcome"));
     screen_add(&s, widget_new(&BUTTON_VT, 11, "OK"));
     screen_add(&s, widget_new(&DIALOG_VT, 12, "Are you sure?"));  /* items[2] */
     screen_add(&s, widget_new(&BUTTON_VT, 13, "Cancel"));
+    /* 
+    Function pointers assignment : first is render,second is on_event
+        static const VTable BUTTON_VT = { button_render, widget_noop_event };
+        static const VTable LABEL_VT  = { label_render,  widget_noop_event };
+        static const VTable DIALOG_VT = { dialog_render, dialog_on_event  };
+    */
 
     printf("frame 1:\n");
-    screen_render(&s);
-    screen_dispatch(&s, 1);
+    screen_render(&s);      // calls widget->vtbl->render function for each widget
+    /* ITERATION
+        1. id = 10 / label = "Welcome" / render = label_render / render(w) = Label #10: Welcome
+        2. id = 11 / label = "OK" / render = button_render / render(w) = [Button #11] "OK"
+    
+    
+    
+    */
 
-    /* TODO 닫힌(closed) 위젯을 여기서 정리(free + 해당 슬롯 NULL)할 필요가 있음 */
+    screen_dispatch(&s, 1); /// calls widget->vtbl->on_event function
+    /* ITERATION
+    
+    
+    
+    
+    */
+
 
     char *status = app_build_status("dialog closed");
     printf("%s\n", status);
-
     printf("frame 2:\n");
-    screen_render(&s);           
+    screen_render(&s);
+        /* 
+        Crash happens here
+            At widget id 1818323300??
+
+        */
 
     free(status);
     for (int i = 0; i < s.count; i++) free(s.items[i]);

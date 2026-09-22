@@ -42,39 +42,85 @@ typedef struct {
     int n;
 } Config;
 
+
 static void cfg_set(Config *c, const char *k, const char *v) {
     if (c->n < MAX_KV) { c->keys[c->n] = k; c->vals[c->n] = v; c->n++; }
+    /* 
+    Add k to c->keys, v to c->vals
+    */
 }
 
 static const char *cfg_get(const Config *c, const char *k) {
-    for (int i = 0; i < c->n; i++)
+    for (int i = 0; i < (c->n); i++)  // Why (c->n)-1??? why ignore the last key?
         if (strcmp(c->keys[i], k) == 0) return c->vals[i];
+        /* STRCMP ================================================================
+        int strcmp(const char *s1, const char *s2) — compares two strings
+            Return 0 = strings are exactly equal
+            Return positive = s1 comes before s2 alphabetically, roughly
+            Return negative = s1 comes after s2 alphabetically, roughly
+
+        Find if any of the elements in c->keys match k. 
+        If match, return the element with the same index in c->vals
+        If no match, return NULL
+        */
     return NULL;                       /* 없는 키 → NULL */
 }
+
+
+
+
 
 static void expand(const Config *c, const char *tmpl, char *out, size_t outcap) {
     size_t o = 0;
     for (const char *p = tmpl; *p; ) {
-        if (p[0] == '$' && p[1] == '{') {
-            const char *end = strchr(p, '}');
-            if (!end) break;
+        /* FOR LOOP ===============================================================
+        Loop walks through string one char at a time
+            Initialization : const char *p = tmpl
+                Create a character pointer p and make it point to the beginning of tmpl.
+            Condition : *p
+                C string ends with \0. As long as not \0, condition is true
+            Update : 
+                p is updated within code. nothing for loop to do
+        */
+        if (p[0] == '$' && p[1] == '{') {       // if part of the string starts with "${"
+            const char *end = strchr(p, '}');   // find first occurrance of } in p
+            if (!end) break;                    // if NULL, there is no }. break loop
+            
             char key[32];
-            size_t kl = (size_t)(end - (p + 2));
+            size_t kl = (size_t)(end - (p + 2)); // part of string that is between "${" and "}"
             if (kl >= sizeof key) kl = sizeof key - 1;
-            memcpy(key, p + 2, kl);
-            key[kl] = '\0';
 
-            const char *v = cfg_get(c, key);      
-            size_t vl = strlen(v);                 
-            if (o + vl < outcap) { memcpy(out + o, v, vl); o += vl; }
+            memcpy(key, p + 2, kl); // moves kl number of bytes from (p+2) to char array (key)
+            key[kl] = '\0';         // have key end in \0
+            const char *v = cfg_get(c, key); // find key in c->keys and return c->vals with the same index
+            // size_t vl = strlen(v);  // Crash happens here
+
+            // New Code
+            size_t vl = 0;
+            if (v != NULL) vl = strlen(v);
+
+            /* CRASH CAUSE ==================================================
+                - v is NULL. can't get strlen(v)
+                - v is NULL because cfg_get couldn't find key in c->key
+                - Only set vl if v is not NULL, otherwise v is 0.
+            */
+
+            if (o + vl < outcap) { 
+                memcpy(out + o, v, vl); // move vl number of bytes from v to out+o
+                o += vl; // out is of size 256. need to keep inside capacity
+            }
             p = end + 1;
-        } else {
+        } else {    // No $ or {. Add to out array and keep iterating next char of tmpl
             if (o + 1 < outcap) out[o++] = *p;
             p++;
         }
     }
     out[o] = '\0';
 }
+
+
+
+
 
 int main(void) {
     /* [Thinking Point]
@@ -98,7 +144,6 @@ int main(void) {
      *               (힌트: "값이 없다"는 NULL 이지 빈 문자열 ""이 아니다) */
     const char *tmpl = "http://${host}:${port}/${path}/index.html";
     char out[256];
-
     expand(&cfg, tmpl, out, sizeof out);   /* ${path} 치환 시 NULL 역참조 → 크래시 */
 
     printf("url = %s\n", out);
