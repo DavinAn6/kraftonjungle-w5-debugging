@@ -40,19 +40,58 @@ typedef struct {
     int   count;
 } Headers;
 
+
 static char *skip_ws(char *s) {
-    while (*s == ' ' || *s == '\t') s++;
+    while (*s == ' ' || *s == '\t') s++;   // If first char is whitespace or tab, return next char
     return s;
 }
 
+
 static void parse_headers(char *text, Headers *h) {
+    /* STRTOK and STRCHR =====================================================
+    char *strtok(char *str, const char *delim) — splits a string into pieces called tokens
+        strtok returns NULL when there are no more non-empty tokens to return
+        strtok(text, "\n") — returns string up until but not including "\n" 
+    char *strchr(const char *str, int c) — finds the first occurrence of a character in a string
+        no modification of the original string
+        because pointer points into the original string, 
+        you can use it to access everything from that character onward.
+    */ 
+
     for (char *line = strtok(text, "\n"); line != NULL; line = strtok(NULL, "\n")) {
         char *colon = strchr(line, ':');   
+        /* First iteration walkthrough =======================================
+            p line — Host: example.com
+            p text — Host: example.com (only prints up until but not including \0)
+                    line = "Host: example.com"
+                    text = "Host: example.com\0Accept:..."
+            p colon — 0x7fffffffddd4 ": example.com"
+                    colon = ": example.com"
+            p *colon — 58 ':' (points to the first char)
+            p colon after assigning \0 — 0x7fffffffddd4 ""
+                    colon = "\0 example.com"
+                    line = "Host\0 example.com"
+            p key — 0x7fffffffddd0 "Host"
+            p val — 0x7fffffffddd6 "example.com"
+                    val = "example.com" (skip_ws function removed the whitespace before 'e')
+            p *val — 101 'e'
+            p h->keys — {0x7fffffffddd0 "Host", 0x0 <repeats 31 times>}
+            p h->vals — {0x7fffffffddd6 "example.com", 0x0 <repeats 31 times>}
+        */ 
 
-        *colon = '\0';                    
+        /* CRASH CAUSE =======================================================
+            One of the tokens returns strchr(line, ':') as NULL. Can't assign '\0'
+                -> If statement to check if colon is NULL
+                If not NULL : proceed as usual
+                If NULL : don't edit colon and set val as NULL
+        */
+
         char *key = line;
-        char *val = skip_ws(colon + 1);
-
+        char *val;
+        if (colon != NULL) {
+            *colon = '\0'; 
+            val = skip_ws(colon + 1); // char right after colon
+        }
         if (h->count < MAX_HEADERS) {
             h->keys[h->count] = key;
             h->vals[h->count] = val;
@@ -61,17 +100,15 @@ static void parse_headers(char *text, Headers *h) {
     }
 }
 
-int main(void) {
 
-    char raw[] =
+int main(void) {
+    char raw[] =  // char array containing one long string
         "Host: example.com\n"
         "Accept: */*\n"
         "Connection\n"                     
         "User-Agent: memdbg-cli\n";
-
     Headers h = { .count = 0 };
     parse_headers(raw, &h);                
-
     printf("parsed %d headers\n", h.count);
     for (int i = 0; i < h.count; i++)
         printf("  %s = %s\n", h.keys[i], h.vals[i]);
