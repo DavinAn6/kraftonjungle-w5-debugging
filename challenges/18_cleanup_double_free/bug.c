@@ -53,6 +53,10 @@ static int handshake_ok(const Conn *c) {
     return 0;                     /* 실패 */
 }
 
+
+
+
+
 static int conn_open(Conn *c, size_t bufsz) {
     c->rx = c->tx = NULL;
     c->state = NULL;
@@ -69,23 +73,38 @@ static int conn_open(Conn *c, size_t bufsz) {
     strcpy(c->rx, "rx-ready");
     strcpy(c->tx, "tx-ready");
     for (int i = 0; i < 4; i++) c->state[i] = i;
+    /* 
+    conn_open(&c, 32);
+        c = {rx = NULL, tx = NULL, state = NULL }
+        c = {rx = malloc(32), tx = malloc(32), state = malloc(sizeof(int) * 4) }
+        c = {rx = "rx-ready", tx = "tx-ready", state = malloc(sizeof(int) * 4) }
+        c = {rx = "rx-ready", tx = "tx-ready", state = {0, 1, 2, 3} }
+    */
 
-    if (!handshake_ok(c)) {
-
-        free(c->tx);              
-        goto fail_tx;             
+    if (!handshake_ok(c)) {     // condition is always true
+        goto fail_state;             
     }
-
     return 0;                     
 
 fail_state:
     free(c->state);
+    c->state = NULL;
 fail_tx:
-    free(c->tx);                 
+    free(c->tx);      // ⚠️ Program crashes here
+    c->tx = NULL;        
 fail_rx:
     free(c->rx);
+    c->rx = NULL;
     return -1;
 }
+/* 
+CRASH CAUSE : c->tx is already freed before goto fail_tx. double free
+FIX : set fields to NULL after free and organize responsibility for freeing fields.
+
+*/
+
+
+
 
 int main(void) {
     Conn c;

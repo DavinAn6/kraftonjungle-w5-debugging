@@ -52,18 +52,35 @@ static void signal_init(Signal *s, size_t n) {
     s->len = s->cap = n;
     for (size_t i = 0; i < n; i++) s->samples[i] = (double)(i % 7) - 3.0;
 }
+/* 
+s->samples = malloc(2,000,000 * sizeof(double))
+s->len = 2,000,000
+s->cap = 2,000,000
+s->samples = {-3.0, -2.0, -1.0, 0.0, 1.0, ...}
+*/
+
+
 
 static void signal_trim(Signal *s, size_t keep) {
     if (keep > s->cap) return;
     double *p = realloc(s->samples, keep * sizeof(double));
     if (p) s->samples = p;
-    s->cap = keep;                 
+    // s->cap = keep;     // Crash cause    
+    s->len = s->cap = keep;     
 }
+/* 
+s->samples = realloc(8 * sizeof(double))
+    realloc to a smaller size keeps the first (8 * sizeof(double)) bytes
+s->cap = 8
+s->len = still 2,000,000
+*/
+
+
 
 static double signal_energy(const Signal *s) {
     double e = 0.0;
     for (size_t i = 0; i < s->len; i++) {   
-        e += s->samples[i] * s->samples[i];
+        e += s->samples[i] * s->samples[i]; // ⚠️ Program crashes here
     }
     return e;
 }
@@ -72,11 +89,8 @@ static double signal_energy(const Signal *s) {
 int main(void) {
     Signal s;
     signal_init(&s, 2000000);       
-
     signal_trim(&s, 8);             
-
-    double e = signal_energy(&s);   
-    
+    double e = signal_energy(&s);   // ⚠️ Program crashes from signal_energy
     printf("energy = %.1f (len=%zu cap=%zu)\n", e, s.len, s.cap);
     free(s.samples);
     return 0;

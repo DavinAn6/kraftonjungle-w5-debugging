@@ -63,6 +63,22 @@ static Bucket *hist_add(Histogram *h, int key) {
     b->count = 0;
     return b;
 }
+/* 
+hist_add(&h, 0)
+    Histogram h = { .data = NULL, .len = 0, .cap = 0 };
+    hist_grow(h)
+            h->cap = 16
+            h->data = realloc(h->data, 16 * sizeof(Bucket))
+    Bucket b = h->data[0] = { .key = 0, .count = 0 }
+
+hist_add(&h, 1)
+    Histogram h = { .data = [b], .len = 1, .cap = 16 };
+    Bucket b = h->data[1] = { .key = 1, .count = 0 }
+
+hist_add(&h, 199,999)
+*/
+
+
 
 static long hist_total(const Histogram *h) {
     long t = 0;
@@ -72,17 +88,35 @@ static long hist_total(const Histogram *h) {
 
 int main(void) {
     Histogram h = { .data = NULL, .len = 0, .cap = 0 };
-
     for (int k = 0; k < 200000; k++) hist_add(&h, k);
 
-    Bucket *hot = &h.data[100000];
-    hot->count = 1;
+    // Bucket *hot = &h.data[100000];  // Crash cause
+    // hot->count = 1;
+
+    int hot = 100000;
+    h.data[hot].count = 1;
 
     for (int k = 200000; k < 600000; k++) hist_add(&h, k);
+    // h->data has indices 0~599999 with a Bucket that has a key with the same value as index
 
-    hot->count += 1000;
+    h.data[hot].count += 1000;     // ⚠️ Program crashes here
+    /* 
+    CRASH
+        Cannot access memory for Bucket *hot
+        p h.data[100000]        {key = 100000, count = 1}
+        p &h.data[100000]       (Bucket *) 0x7ffff5f61a10
+        p hot                   (Bucket *) 0x7ffff7763a10
+    
+    CAUSE
+        The second for loop called hist_grow which realloced Histogram h to a different memory space
+        But hot is still holding the old memory (i.e. stale pointer)
+    
+    FIX  
+        Change from saving pointer to saving just the index num
+        Alternatively, could reassign *hot after second for loop
+    */
 
-    printf("hot=%ld total=%ld len=%zu\n", hot->count, hist_total(&h), h.len);
+    printf("hot=%ld total=%ld len=%zu\n", h.data[hot].count, hist_total(&h), h.len);
     free(h.data);
     return 0;
 }

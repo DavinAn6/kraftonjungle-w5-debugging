@@ -41,23 +41,54 @@
 
 
 static void append_field(char *buf, size_t cap, size_t *len, const char *field, char sep) {
+    if (*len >= cap-1) return;          // ⚠️ Crash fix
     if (*len > 0) {
         buf[(*len)++] = sep;             
     }
     size_t flen = strlen(field);
-    for (size_t i = 0; i < flen; i++) {
-        buf[(*len)++] = field[i];         
+    for (size_t j = 0; j < flen; j++) {
+        if (*len >= cap-1) break;       // ⚠️ Crash fix. Need room for null terminater
+        buf[(*len)++] = field[j];
     }
-    buf[*len] = '\0';
-    (void)cap;                            
+    buf[*len] = '\0';                           
 }
+/* 
+Function call : append_field(rec, 24, &len, fields[i], '|');
+    rec[24]
+    len = 0
+    i = 0, 1, 2, 3
+    fields = {"id=1042", "name=Jonathan", "department=Engineering", "role=maintainer"}
+
+(i = 0)
+    *len = 0
+    flen = fields[0] = 7
+    rec[0] = fields[0][0]  'i'
+    rec[1] = fields[0][1]  'd'
+    ...
+    rec[6] = fields[0][6]  '2'
+    rec[7] = \0
+    cast cap to void. won't be using it anymore
+
+(i = 1)
+    *len = 7
+        rec[7] = |
+    flen = fields[1] = 13
+    rec[8] = fields[1][0]   'n'
+    rec[9] = fields[1][1]   'a'
+    ...
+    rec[20] = fields[1][12] 'n'
+    rec[21] = \0
+*/
+
+
+
 
 static void build_record(char *rec, size_t cap) {
     const char *fields[] = {
         "id=1042", "name=Jonathan", "department=Engineering", "role=maintainer",
     };
-    int n = (int)(sizeof(fields) / sizeof(fields[0]));
-
+    // 
+    int n = (int)(sizeof(fields) / sizeof(fields[0]));  // n = 4. 4 pointer size divided by 1 pointer size
     size_t len = 0;
     rec[0] = '\0';
     for (int i = 0; i < n; i++) {
@@ -65,11 +96,26 @@ static void build_record(char *rec, size_t cap) {
     }
 }
 
+
+
+
 int main(void) {
     char rec[24];                         
-
     build_record(rec, sizeof rec);        
+    printf("record = %s\n", rec);   // record = id=1042|name=Jonathan|department=Engineering|role=maintainer
+    return 0;
 
-    printf("record = %s\n", rec);
-    return 0;                            
-}
+}   // ⚠️ Program crashes here
+/* 
+Program crashes right after main() ends
+    p rec           "id=1042|name=Jonathan|de"
+    p rec[23]       'e'
+    p rec[24]       'p'
+    p sizeof(rec)   24
+
+sizeof rec is 24 but added characters past that
+Writing past the end of a local array is undefined behavior
+It seems to work this time but it can break at any point
+
+Fix : Add cap check to append_field function and truncate to prevent overflow
+*/

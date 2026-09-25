@@ -51,13 +51,15 @@ typedef struct {
 
 #define QCAP 16
 typedef struct {
-    Msg *inbox[QCAP];   int head, tail;      /* 원형 큐 */
-    Msg *log[QCAP];     int log_n;            /* 감사용: 같은 Msg 포인터를 보관 */
+    Msg *inbox[QCAP];   /* 원형 큐 */
+    Msg *log[QCAP];     /* 감사용: 같은 Msg 포인터를 보관 */
+    int head, tail;
+    int log_n;
 } Broker;
 
 typedef void (*Subscriber)(Msg *m);
 
-static Msg *msg_new(int id, const char *body) {
+static Msg *msg_new(int id, const char *body) { // 발행
     Msg *m = malloc(sizeof *m);
     if (!m) exit(1);
     m->id = id;
@@ -72,43 +74,85 @@ static void msg_free(Msg *m) {
     free(m);
 }
 
-static void publish(Broker *b, int id, const char *body) {
+static void publish(Broker *b, int id, const char *body) {  // 배달
     Msg *m = msg_new(id, body);
     b->inbox[b->tail] = m;
     b->tail = (b->tail + 1) % QCAP;
     b->log[b->log_n++] = m;              
 }
+/* 
+msg_new creates Msg with id and body (mallocs Msg and body)
+Save same Msg pointer to b->inbox and b->log
+
+    publish(&b, 1, "hello");
+        Broker b = { .head = 0, .tail = 0, .log_n = 0 };
+        b->inbox[0] = Msg m {id = 1, body = "hello"}
+        b->tail = 1%16 = 1
+        b->log[0] = m
+        b->log_n++
+
+    publish(&b, 2, "world");
+        Broker b = { .head = 0, .tail = 1, .log_n = 1 };
+        b->inbox[1] = Msg m {id = 2, body = "world"}
+        b->tail = 2%16 = 2
+        b->log[1] = m
+        b->log_n++
+
+    publish(&b, 3, "broker");
+        Broker b = { .head = 0, .tail = 2, .log_n = 2 };
+        b->inbox[2] = Msg m {id = 3, body = "broker"}
+        b->tail = 3%16 = 3
+        b->log[2] = m
+        b->log_n++
+*/
+
+
 
 static void deliver(Broker *b, Subscriber sub) {
     while (b->head != b->tail) {
         Msg *m = b->inbox[b->head];
-        b->head = (b->head + 1) % QCAP;
-        sub(m);                          
+        b->log[b->head] = NULL;         // FIX: broker no longer owns it
+        b->inbox[b->head] = NULL;       // FIX: no stale pointer left in inbox
+        b->head = (b->head + 1) % QCAP; 
+        sub(m);                         // on_message(m). subscriber frees m
     }
 }
+/* 
+Subscriber is typedef'd. Represents any function that returns void and takes Msg pointer as parameter
+
+Broker b = { .head = 0, .tail = 3, .log_n = 3 };
+    m = b->inbox[0]     // Msg m {id = 1, body = "hello"}
+    b->head = 1%16 = 1
+    on_message(m)       // prints m->id, m->body. then frees m->body and m
+
+CRASH CAUSE
+    b->inbox and b->log has the same Msg *m as elements but is getting double freed
+    Fix : clear b->log within deliver function and skip NULL slots in broker shutdown function
+*/
+
 
 static void on_message(Msg *m) {
     printf("recv #%d: %s\n", m->id, m->body);
-    msg_free(m);                         
+    msg_free(m);
 }
+
 
 static void broker_shutdown(Broker *b) {
     for (int i = 0; i < b->log_n; i++) {
-        msg_free(b->log[i]);             
+        if (b->log[i] != NULL)  msg_free(b->log[i]); 
+        // msg_free(b->log[i]);     // ⚠️ Program crashes here
     }
     b->log_n = 0;
 }
 
+
 int main(void) {
     Broker b = { .head = 0, .tail = 0, .log_n = 0 };
-
     publish(&b, 1, "hello");
     publish(&b, 2, "world");
     publish(&b, 3, "broker");
-
-    deliver(&b, on_message);             
-
-    broker_shutdown(&b);                 
+    deliver(&b, on_message); // passes reference to on_message function as argument
+    broker_shutdown(&b);     // ⚠️ Program crashes here            
     printf("done\n");
     return 0;
 }
