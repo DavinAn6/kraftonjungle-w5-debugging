@@ -59,23 +59,48 @@ static Image *image_new(int width, int height, int channels) {
     img->width = width;
     img->height = height;
     img->channels = channels;
-
-    img->nbytes = width * height * channels;
-    img->px = malloc((size_t)img->nbytes);     
+    // img->nbytes = width * height * channels; // ⚠️ Program crashes cause
+    /* 
+    Since nbytes field is int, it won't fit 65536 * 65536 * 4
+    nbytes ends up as 0
+    Instead of nbytes field, use separate size_t variable.
+    Since size_t wraps around on overflow, make sure width * height * channels fits in SIZE_MAX
+    */
+    size_t px_size;
+    if (width<=0 || height<=0 || channels<=0) {
+        fprintf(stderr, "invalid size\n"); 
+        exit(1);
+    } else if ((size_t)width > (SIZE_MAX/(size_t)height/(size_t)channels)) {
+        fprintf(stderr, "image size overflows size_t\n"); 
+        exit(1);
+    } else {
+        px_size = (size_t) width * height * channels;
+    }
+    img->px = malloc(px_size);     
     if (!img->px) { perror("malloc px"); exit(1); }
     return img;
 }
+/* IMAGE_NEW
+Function call : image_new(65536, 65536, 4)
+    Image *img = malloc(sizeof *img);
+        width = 65536
+        height = 65536
+        channels = 4
+        nbytes = 65536 * 65536 * 4 = 17,179,869,184
+    img->px = malloc((size_t)img->nbytes);   
+
+*/
+
 
 static void image_fill(Image *img, unsigned char value) {
-
     size_t total = (size_t)img->width * (size_t)img->height * (size_t)img->channels;
     for (size_t i = 0; i < total; i++) {
-        img->px[i] = value;                     
+        img->px[i] = value;                 // ⚠️ Program crashes here                  
     }
 }
 
-int main(void) {
 
+int main(void) {
     /* [Thinking Point]
      * 65536 x 65536 픽셀에 채널 4개(RGBA: Red/Green/Blue/Alpha=불투명도)를 요청한다.
      * 실제 필요한 바이트 수를 손으로 계산해보자: 65536 * 65536 * 4 = 17,179,869,184 (약 16GB).
@@ -89,9 +114,7 @@ int main(void) {
     Image *img = image_new(65536, 65536, 4);
     printf("allocated nbytes(int)=%d for %dx%d x%d\n",
            img->nbytes, img->width, img->height, img->channels);
-
-    image_fill(img, 0xFF);                       
-
+    image_fill(img, 0xFF);       // fills the entirety of img->px with 0xFF 
     printf("px[0]=%u\n", img->px[0]);
     free(img->px);
     free(img);

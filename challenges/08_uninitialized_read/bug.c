@@ -71,8 +71,9 @@ static void dirty_heap(void) {
     }
 }
 
-static int **make_matrix(void) {
 
+
+static int **make_matrix(void) {
     int **rows = malloc(ROWS * sizeof(int *));
     if (!rows) { perror("malloc"); exit(1); }
 
@@ -84,24 +85,43 @@ static int **make_matrix(void) {
     return rows;
 }
 
+
+
 static long row_sum(int **rows, int nrows) {
     long total = 0;
-    for (int i = 0; i < nrows; i++) {
+    for (int i = 0; i < nrows; i += 2) {
         for (int j = 0; j < COLS; j++) {
-            total += rows[i][j];      
+            total += rows[i][j];      // ⚠️ Program crashes here
         }
     }
     return total;
 }
 
+
+
 int main(void) {
     dirty_heap();
-
     int **rows = make_matrix();
+    /* MAKE MATRIX ========================================================
+    rows = 32 int pointers
+        iterate for even number rows (i = 0, 2, 4, 8...)
+        odd number rows are untouched, so probably filled with trash data
+        the odd rows are also not malloced so we have no right to access them in row_sum
+    r = 4 int pointers ———> assign to each row
+        for all the even number rows, assign as column
+    ======================================================================
+    */
+
+
     printf("summing %dx%d matrix...\n", ROWS, COLS);
-
-    long s = row_sum(rows, ROWS);     
-
+    long s = row_sum(rows, ROWS);    
+    /* CRASH CAUSE =======================================================
+    Only even rows were malloced but row_sum's outer for loop called on all rows
+    Change update condition from `i++` to `i += 2`. Same as make_matrix
+    ======================================================================
+    */
+    
+    
     printf("sum = %ld\n", s);
 
     for (int i = 0; i < ROWS; i += 2) free(rows[i]);

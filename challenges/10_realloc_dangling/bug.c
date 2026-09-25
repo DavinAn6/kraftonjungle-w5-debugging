@@ -81,27 +81,73 @@ static void eb_push(EditBuffer *e, int v) {
 static void eb_free(EditBuffer *e) {
     free(e->data);
     free(e->clipboard);
+    // for (int i = 0; i < e->undo_n; i++) {
+    //     free(e->undo[i]);   // ⚠️ Program crashes here         
+    // }
+    /* CRASH CAUSE ================================================================
+    free(e->data);
+    free(e->clipboard);
     for (int i = 0; i < e->undo_n; i++) {
-        free(e->undo[i]);           
+        free(e->undo[i]);       
     }
+
+    p i                 0
+    p e->undo[0]        (int *) 0x5555555592a0
+    p *(e->undo[0])     1431655769
+
+        No need to free undo
+        Only data and clipboard wre malloced
+    */
     e->undo_n = 0;
     e->data = NULL;
 }
 
+
+
+
 int main(void) {
     EditBuffer e;
     eb_init(&e);
+    /* EB_INIT ===================================================================
+    Sets EditBuffer fields to
+        cap: 4
+        len: 0
+        undo_n: 0
+        data: malloc(cap * sizeof(int))
+        clipboard: malloc(cap * sizeof(int))
+    */
 
     for (int i = 0; i < 3; i++) eb_push(&e, i);
+    /* EB_PUSH ===================================================================
+    For i = 0, 1, 2, data[len++] = i
+        Note : we can index data because we already allocated enough memory.
+    If len and cap are the same, realloc data by doubling capacity
+    */
 
-    eb_snapshot(&e);                 
+    eb_snapshot(&e);  
+    /* EB_SNAPSHOT ===============================================================
+    e->undo[e->undo_n++] = e->data
+        Assigns at index undo_n first (in this case 0) and then increase.
+        e->undo_n++ uses post-increment, meaning: use the current value first, then increment afterward.
+    Result
+        p e->undo[0]        (int *) 0x5555555592a0
+        p *(e->undo[0])     0
+        p *(e->undo[1])     cannot access memory at address 0x0
+        p &(e->data[0])     (int *) 0x5555555592a0
+    */
+    
+    for (int i = 0; i < 4000; i++) eb_push(&e, i);
+    /* EB_PUSH ===================================================================
+        For i = 0~3999, data[len++] = i
+        If len and cap are the same, realloc data by doubling capacity
+    */
 
-    for (int i = 0; i < 4000; i++) eb_push(&e, i);     
 
     printf("len=%zu cap=%zu head=%d tail=%d\n",
            e.len, e.cap, e.data[0], e.data[e.len - 1]);
+    // len=4003 cap=4096 head=0 tail=3999
 
-    eb_free(&e);                     
+    eb_free(&e);          // ⚠️ Program crashes from eb_free function           
     printf("done\n");
     return 0;
 }

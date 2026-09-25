@@ -51,13 +51,14 @@ typedef struct {
 
 static void audit_add(Audit *a, int id) {
     if (a->len == a->cap) {
-        a->cap = a->cap ? a->cap * 2 : 16;
+        a->cap = a->cap ? a->cap * 2 : 16;  // if cap already has a value, double it, otherwise start it at 16.
         int *p = realloc(a->ids, a->cap * sizeof(int));   
         if (!p) { perror("realloc"); exit(1); }
         a->ids = p;
     }
     a->ids[a->len++] = id;
 }
+
 
 static Job *push_job(Job *head, int id, int priority) {
     Job *n = malloc(sizeof *n);
@@ -67,6 +68,23 @@ static Job *push_job(Job *head, int id, int priority) {
     n->next = head;
     return n;
 }
+/* PUSH_JOB ==========================================================================
+Function call : push_job(head, i, (i * 7) % 10) for i=1~4000
+
+Note : sizeof *n is the size of a full Job struct
+
+Function creates almost a linked list of Job structs
+    n->id = i
+    n->priority = (i * 7) % 10
+    n->next = head
+
+4000->next = 3999
+3999->next = 3998
+
+Priority —> 7, 4, 1, 8, 5, ...
+*/
+
+
 
 /* 취소된 잡을 반납한다(해제 책임은 이 함수가 진다). */
 static void job_release(Job *j) {
@@ -76,12 +94,13 @@ static void job_release(Job *j) {
 static Job *filter_jobs(Job *head, int threshold, Audit *audit) {
     Job *keep = NULL, *keep_tail = NULL;
     Job *cur = head;
-
+    Job *temp;
     while (cur != NULL) {
-        if (cur->priority < threshold) {
+        if (cur->priority < threshold) {    // ⚠️ Program crashes here
             audit_add(audit, cur->id);   
-            job_release(cur);            
-            cur = cur->next;             
+            temp = cur->next;
+            job_release(cur);   
+            cur = temp;            
         } else {
             Job *nx = cur->next;
             cur->next = NULL;
@@ -92,6 +111,29 @@ static Job *filter_jobs(Job *head, int threshold, Audit *audit) {
     }
     return keep;
 }
+/* FILTER_JOBS =====================================================================
+Function call : filter_jobs(head, 5, &audit)
+
+- head starts at id 4000
+- audit_add(audit, cur->id) : checks audit capacity and adds cur->id to audit->ids[len]
+- how can it get cur->next when we just freed cur??
+
+For cur->id 4000
+    p cur->priority     0
+    p audit->ids[0]     4000
+
+Crashes at next if (cur->priority < threshold)
+    Can't access cur because we just freed it
+    But why isn't it crashing at cur->next?
+        free(cur)
+        but there is still trash there..?
+
+걍 임시 객체로 cur->next 저장해두고 cur를 놓아줌
+*/
+
+
+
+
 
 int main(void) {
     Job *head = NULL;
@@ -99,6 +141,9 @@ int main(void) {
         head = push_job(head, i, (i * 7) % 10);   
 
     Audit audit = {0};
+    // {0} is a shorthand that zeroes out the entire struct, not just one field.
+    // ids is NULL, len and cap are 0
+
     head = filter_jobs(head, 5, &audit);           
 
     int remaining = 0;

@@ -59,24 +59,68 @@ static void *arena_alloc(size_t n) {
 static char *intern(const char *s) {
     size_t n = strlen(s) + 1;
     char *dst = arena_alloc(n);
-    memcpy(dst, s, n);                      /* 경계를 넘은 위치면 여기서 크래시 */
+    memcpy(dst, s, n);    // ⚠️ Program crashes here
     return dst;
 }
+/* INTERN(BUF) ======================================================================
+(i = 0) "insert-0"
+    n = 9
+    arena[4096]
+    arena_alloc(9) ———————> *p = &arena[0]
+                            p arena[0]      0 '\000'
+                            p arena_off     9
+    memcpy(dst, s, n) ————> copies n bytes from s to dst
+                            p s             0x7fffffffdde0 "insert-0"
+                            p dst           0x555555558040 <arena> "insert-0"
+
+Program crashes with SIGSEGV signal at `memcpy(dst, s, n)`
+    p s         0x7fffffffdde0 "checkpoint-349"
+    p dst       0x7a69c1b6bec7e5b3 <error: Cannot access memory at address 0x7a69c1b6bec7e5b3>
+    p n         15
+
+HYPOTHESIS
+arena ran out of space? 4096 chars side by side. this was 349th
+35 times the entire words array was saved + additional -%d
+entire words array is 71 chars + 10 for extra \0 at the end
+81*35 = 2835
+10(0~9) + 2*90(10~99) + 3*250(100~349) + 350(for the dash mark) = 1290
+Both combined is 4125, over 4096
+After "compact-347" is added, arena_off is 4096. Can't add "serialize-348"
+*/
+
+
+
+
 
 int main(void) {
-    
     const char *words[] = {
         "insert", "delete", "search", "traverse", "balance",
         "rotate", "rehash", "compact", "serialize", "checkpoint",
     };
     int nwords = (int)(sizeof(words) / sizeof(words[0]));
+    /* NWORDS =======================================================================
+    words has 10 pointers, so sizeof(words) = 80 bytes
+    one pointer has 8 bytes, so sizeof(words[0]) = 8 bytes
+    nwords = number of elements in words = 10
+    */
+    
 
     char *last = NULL;
     long total = 0;
     for (int i = 0; i < 100000; i++) {
         char buf[32];
         snprintf(buf, sizeof buf, "%s-%d", words[i % nwords], i);
-        last = intern(buf);                 
+        /* SNPRINTF =================================================================
+        fill each new buf with "words[i % 10] - i" within size limitation
+        (i = 0)     "insert-0"
+        (i = 1)     "delete-1"
+        ...
+        (i = 9)     "checkpoint-9"
+        (i = 10)    "insert-10"
+        (i = 11)    "delete-11"
+        */
+        if (arena_off + strlen(buf) + 1 > ARENA_SIZE) break; // Fix to check arena capacity
+        last = intern(buf);             // ⚠️ Program crashes from intern function             
         total += (long)strlen(last);
     }
 

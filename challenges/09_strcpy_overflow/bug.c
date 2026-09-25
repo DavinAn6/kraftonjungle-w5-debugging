@@ -38,11 +38,24 @@
 /* 필요한 총 바이트 수 = 모든 조각 길이 합 + 종료 문자 1 */
 static size_t joined_size(const char *const *parts, int n) {
     size_t total = 1;                        /* '\0' 자리 */
-    for (int i = 0; i < n - 1; i++) {        
+    for (int i = 0; i < n; i++) {     
         total += strlen(parts[i]);
     }
     return total;
 }
+/* JOINED_SIZE ================================================================
+parts = { "GET ", "/index.html", " HTTP/1.1\r\n\r\n", body }
+n = 4
+total = 29
+
+Problem
+    i stops at n-2, before `body`
+    Change condition to i < n
+
+===============================================================================
+*/
+
+
 
 static char *join(const char *const *parts, int n) {
     size_t need = joined_size(parts, n);
@@ -51,21 +64,69 @@ static char *join(const char *const *parts, int n) {
 
     size_t off = 0;
     for (int i = 0; i < n; i++) {            /* 복사는 마지막 조각까지 전부 → 오버플로 */
-        strcpy(out + off, parts[i]);
+        strcpy(out + off, parts[i]);        // ⚠️ Program crashes here
         off += strlen(parts[i]);
     }
     out[off] = '\0';
     return out;
 }
+/* JOIN ======================================================================
+parts = { "GET ", "/index.html", " HTTP/1.1\r\n\r\n", body }
+n = 4
+need = 29
+
+char *strcpy(char *dest, const char *src);
+
+ITERATION (i = 0, 1, 2, 3)
+    (i = 0)
+        p parts[0]      0x55555555600b "GET "
+        p out+off       0x5555555892a0 "GET "
+        p *out          71 'G'
+        p off           4
+    (i = 1)
+        p parts[1]      0x555555556010 "/index.html"
+        p out           0x5555555892a0 "GET /index.html"
+        p out+off       0x5555555892af "" -> 이미 off 바뀐 후라 값 틀림
+        p *out          71 'G'
+        p off           15
+    (i = 2)
+        p parts[2]      0x55555555601c " HTTP/1.1\r\n\r\n"
+        p out           0x5555555892a0 "GET /index.html HTTP/1.1\r\n\r\n"
+        p out+off       0x5555555892af " HTTP/1.1\r\n\r\n"
+        p *out          71 'G'
+        p off           28
+    (i = 3)
+        SIGSEGV
+        joined_size never counted strlen for last element. not enough space
+===============================================================================
+*/
+
+
+
 
 int main(void) {
-    
     static char body[200000];
     memset(body, 'x', sizeof body - 1);
+        // Fills body[0] ~ body [199999] with 'x'
+
     body[sizeof body - 1] = '\0';
+        // body[199999] = '\0'
 
     const char *parts[] = { "GET ", "/index.html", " HTTP/1.1\r\n\r\n", body };
     int n = (int)(sizeof(parts) / sizeof(parts[0]));
+    /* 
+    n = 32/8 = 4
+
+    parts is an array of pointers. Each element pinting to somewhere a string lives
+    sizeof(parts)
+        the total byte size of the array
+        since parts has 4 pointers, and each pointer is 8 bytes, sizeof(parts) = 32
+    sizeof(parts[0])
+        since parts is an array of pointers, parts[0] is a pointer not the actual string constant
+        so sizeof(parts[0]) is just the byte size of a pointer, 8
+        not related to how many characters are in "GET " at all
+    n just calculates the number of elements in the array    
+    */
 
     char *msg = join(parts, n);              /* 복사 중 힙 오버플로 → 크래시 */
 

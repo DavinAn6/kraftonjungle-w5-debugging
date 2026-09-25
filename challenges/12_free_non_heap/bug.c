@@ -64,12 +64,28 @@ static void parse_row(Row *r, const char *csv) {
     r->base = strdup(csv);       
     if (!r->base) { perror("strdup"); exit(1); }
     r->n = 0;
-
-    for (char *tok = strtok(r->base, ","); tok && r->n < MAX_FIELDS;
-         tok = strtok(NULL, ",")) {
+    for (char *tok = strtok(r->base, ","); tok && r->n < MAX_FIELDS; tok = strtok(NULL, ",")) {
         r->fields[r->n++] = tok;  /* fields[0]=base, 나머지는 내부 포인터 */
     }
+    /* PARSE_ROW ======================================================================
+    Initializes r
+        base = copy of "id,name,dept,salary"
+        n = 0
+
+    strdup : Takes string, returns a new char * pointing to a fresh copy. Calls malloc internally. Need to free
+    strtok : returns pointers into the original string. no new memory allocation
+    
+    FOR LOOP 
+    1. Create tok(token created by delimiting base with ",")
+    2. Save tok as an element of r->fields (an array of char pointers)
+    3. If tok is not '\0' and n is less than capacity continue
+    4. Update tok to be next token
+
+    fields end up being {"id", "name", "dept", "salary"}
+    */
 }
+
+
 
 static void row_print(const Row *r) {
     printf("%d fields:", r->n);
@@ -77,19 +93,28 @@ static void row_print(const Row *r) {
     printf("\n");
 }
 
+
 static void row_free(Row *r) {
-    for (int i = 0; i < r->n; i++) {
-        free(r->fields[i]);       
-    }
+    free(r->base);
+    // for (int i = 0; i < r->n; i++) {
+    //     free(r->fields[i]);   // ⚠️ Program crashes here    
+    // }
     r->n = 0;
 }
+/* CRASH CAUSE ==============================================================
+No need to free every element of fields
+They all point to some char in base. Just free base
+Also freeing a token is undefined behavior. 
+free() must be given the exact address that malloc originally returned
+*/
+
 
 int main(void) {
     Row r;
     parse_row(&r, "id,name,dept,salary");
     row_print(&r);
 
-    row_free(&r);                 
+    row_free(&r);             // ⚠️ Program crashes from row_free function
     printf("done\n");
     return 0;
 }

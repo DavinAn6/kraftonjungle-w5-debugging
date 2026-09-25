@@ -59,42 +59,81 @@ static User *login(int uid, const char *name) {
     if (!u) { perror("malloc"); exit(1); }
     u->permission = allow_all;
     u->uid = uid;
-    strncpy(u->name, name, sizeof(u->name) - 1);
-    u->name[sizeof(u->name) - 1] = '\0';
+    strncpy(u->name, name, sizeof(u->name) - 1);    // copies 23 bytes. alice\0000...
+    u->name[sizeof(u->name) - 1] = '\0';            // adds \0 to last index
     return u;
 }
+/* LOGIN =================================================================
+Function call : login(42, "alice")
+    malloc(sizeof *u)
+        u->permission = address for the function 'allow_all'
+        u->uid = 42
+        u->name = "alice\0"
+
+NOTE
+u->permission = allow_all; 
+    - This is not calling the allow_all function. Just grabbing a reference to it
+strncpy(char *dest, const char *src, size_t n)
+    - Same as strcpy but n is the max number of characters to copy
+    - If src is shorter than n, remaning bytes are filled with \0
+*/
+
 
 static void logout(Session *s) {
     free(s->user);         
+    s->user = NULL;
 }
 
+
+
+
 /* 감사 로그 항목. User 와 같은 크기라 해제된 청크를 재사용하기 쉽다. */
+// Same size as User, so malloc reuses the chunk freed in logout() 
 static char *audit_record(const char *event) {
     char *rec = malloc(sizeof(User));       
     if (!rec) exit(1);
     memset(rec, 0xAB, sizeof(User));        /* permission 자리를 0xAB.. 로 오염 */
-    snprintf(rec, sizeof(User), "audit:%s", event);
+    // Not just permission. Overwriting entire malloc(sizeof(User)) that was just freed at logout(&s)
+    snprintf(rec, sizeof(User), "audit:%s", event); // rec = audit:logout
     return rec;
 }
 
 static int handle_request(Session *s, const char *action) {
-
-    return s->user->permission(action);    
+    // return s->user->permission(action);    // ⚠️ Program crashes here
+    if (s != NULL && s->user != NULL) {
+        return s->user->permission(action);
+    } else {
+        return 0;
+    }
 }
+
+
 
 int main(void) {
     Session s;
     s.session_id = 1;
     s.user = login(42, "alice");
-
-    printf("first request allowed=%d\n", handle_request(&s, "read"));
-
-    logout(&s);                              
+    /* 
+    p s->user->permission   (PermFn) 0x555555555269 <allow_all>
+    p s->user->uid          42
+    p s->user->name         "alice", '\000' <repeats 18 times>
+    */
+    printf("first request allowed=%d\n", handle_request(&s, "read"));   // "first request allowed=1"
+    logout(&s);     // free(s->user)
 
     char *rec = audit_record("logout");      
     printf("%s\n", rec);
-    
-    printf("second request allowed=%d\n", handle_request(&s, "write"));
+    printf("second request allowed=%d\n", handle_request(&s, "write")); // ⚠️ Program crashes here
+    /* 
+    How is it calling s->user inside handle_request(&s, "write") when we already freed in logout(&s)
+        p s->user->permission("write")      SIGSEGV
+        p s->user->permission               (PermFn) 0x6f6c3a7469647561
+        p s->user                           (User *) 0x5555555592a0
+        p s->user->uid                      1953853287
+        p s->user->name                     "\000", '\253' <repeats 23 times>
+        p rec                               0x5555555592a0 "audit:logout" — same as s->user
+
+    */
 
     free(rec);
     return 0;

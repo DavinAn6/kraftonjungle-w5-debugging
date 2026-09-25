@@ -149,7 +149,7 @@ static void screen_render(Screen *s) {
 static void dialog_on_event(Widget *self, int code) {
     if (code == 1) {
         self->closed = 1;
-        widget_destroy(self);   
+        // widget_destroy(self);   // this line frees the widget and triggers UAF when called again later
     }
 }
 
@@ -164,6 +164,7 @@ static char *app_build_status(const char *text) {
      */
     memset(msg, 0xAB, sizeof(Widget));
     snprintf(msg, sizeof(Widget), "STATUS: %s", text);
+
     return msg;
 }
 
@@ -184,33 +185,32 @@ int main(void) {
     */
 
     printf("frame 1:\n");
-    screen_render(&s);      // calls widget->vtbl->render function for each widget
+    screen_render(&s); // calls widget->vtbl->render function for each widget
     /* ITERATION
         1. id = 10 / label = "Welcome" / render = label_render / render(w) = Label #10: Welcome
         2. id = 11 / label = "OK" / render = button_render / render(w) = [Button #11] "OK"
-    
-    
-    
+        3. id = 12 / label = "Are you sure?" / render = dialog_render / render(w) = <<Dialog #12>> Are you sure?
+        4. id = 13 / label = "Cancel" / render = button_render / render(w) = [Button #13] "Cancel"
     */
 
-    screen_dispatch(&s, 1); /// calls widget->vtbl->on_event function
+    screen_dispatch(&s, 1); // calls widget->vtbl->on_event function for each widget
     /* ITERATION
-    
-    
-    
-    
+        1. id = 10 / label = "Welcome" / on_event = widget_noop_event / on_event(w, code) = 
+        2. id = 11 / label = "OK" / on_event = widget_noop_event / on_event(w, code) = 
+        3. id = 12 / label = "Are you sure?" / on_event = dialog_on_event / on_event(w, code) = 
+        4. id = 13 / label = "Cancel" / on_event = widget_noop_event / on_event(w, code) = 
     */
-
 
     char *status = app_build_status("dialog closed");
     printf("%s\n", status);
     printf("frame 2:\n");
-    screen_render(&s);
-        /* 
-        Crash happens here
-            At widget id 1818323300??
-
-        */
+    screen_render(&s); // Program crashes here
+    /* ITERATION
+        1. id = 10 / label = "Welcome" / render = label_render / render(w) = Label #10: Welcome
+        2. id = 11 / label = "OK" / render = button_render / render(w) = [Button #11] "OK"
+        3. id = 1818323300 / label = "losed\000" —> Corrupted
+        4. id = 13 / label = "Cancel" / render = button_render / render(w) = [Button #13] "Cancel"
+    */
 
     free(status);
     for (int i = 0; i < s.count; i++) free(s.items[i]);
