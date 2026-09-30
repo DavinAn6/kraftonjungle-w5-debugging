@@ -48,16 +48,15 @@ static char *skip_ws(char *s) {
 
 
 static void parse_headers(char *text, Headers *h) {
-    /* STRTOK and STRCHR =====================================================
-    char *strtok(char *str, const char *delim) — splits a string into pieces called tokens
-        strtok returns NULL when there are no more non-empty tokens to return
-        strtok(text, "\n") — returns string up until but not including "\n" 
-    char *strchr(const char *str, int c) — finds the first occurrence of a character in a string
-        no modification of the original string
-        because pointer points into the original string, 
-        you can use it to access everything from that character onward.
-    */ 
-
+/* STRTOK and STRCHR =====================================================
+char *strtok(char *str, const char *delim) — splits a string into pieces called tokens
+    strtok returns NULL when there are no more non-empty tokens to return
+    strtok(text, "\n") — returns string up until but not including "\n" 
+char *strchr(const char *str, int c) — finds the first occurrence of a character in a string
+    no modification of the original string
+    because pointer points into the original string, 
+    you can use it to access everything from that character onward.
+*/ 
     for (char *line = strtok(text, "\n"); line != NULL; line = strtok(NULL, "\n")) {
         char *colon = strchr(line, ':');   
         /* First iteration walkthrough =======================================
@@ -79,19 +78,24 @@ static void parse_headers(char *text, Headers *h) {
             p h->vals — {0x7fffffffddd6 "example.com", 0x0 <repeats 31 times>}
         */ 
 
-        /* CRASH CAUSE =======================================================
-            One of the tokens returns strchr(line, ':') as NULL. Can't assign '\0'
-                -> If statement to check if colon is NULL
-                If not NULL : proceed as usual
-                If NULL : don't edit colon and set val as NULL
-        */
+/* 
+Original Code =====================================================
+    *colon = '\0';   // ⚠️ Program crashes here 
+    char *key = line;
+    char *val = skip_ws(colon + 1);
 
+
+CRASH CAUSE =======================================================
+    One of the tokens returns strchr(line, ':') as NULL. Can't assign '\0'
+    -> If statement to check if colon is NULL
+    If not NULL : proceed as usual
+    If NULL : skip
+*/
+        // Fix
+        if (colon ==  NULL) {continue;}   // skip the null returns
+        *colon = '\0';
         char *key = line;
-        char *val = NULL;
-        if (colon != NULL) {
-            *colon = '\0'; 
-            val = skip_ws(colon + 1); // char right after colon
-        }
+        char *val = skip_ws(colon + 1);
         if (h->count < MAX_HEADERS) {
             h->keys[h->count] = key;
             h->vals[h->count] = val;

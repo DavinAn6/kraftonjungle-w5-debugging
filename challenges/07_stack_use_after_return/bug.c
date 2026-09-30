@@ -49,14 +49,16 @@ typedef struct {
 
 
 /* 결과를 뷰에 채운다(포인터를 함수 경계 너머로 옮겨 -Wdangling 을 회피하는 형태) */
-static void view_set(LineView *out, char **arr, int n) {
+// Function no longer used after bug fix
+/* static void view_set(LineView *out, char **arr, int n) {
     out->lines = arr;
     out->count = n;
-}
+} */
 
 
 static void split_lines(LineView *out, char *text) {
     out->lines = malloc(MAX_LINES * sizeof(char *));
+    if (!out->lines) { perror("malloc"); exit(1); }
     // char *parts[MAX_LINES];              
     int n = 0;
     /* strtok는 새로 할당하지 않고, 넘겨받은 문자열 내부의 주소를 돌려준다. 
@@ -64,27 +66,29 @@ static void split_lines(LineView *out, char *text) {
     */
     for (char *ln = strtok(text, "\n"); ln && n < MAX_LINES; ln = strtok(NULL, "\n"))
         out->lines[n++] = ln;
-
     out->count = n;
     // view_set(out, parts, n);      
-
     /* TODO 상기 코드를 수정하여 결과를 호출자가 준 out 에 직접 채운다(값 반환 아님, 지역 주소 반환 아님). */       
 }
 /* SPLIT_LINES ========================================================================
 Declaration
     char *ln = strtok(text, "\n") ===> splits text into tokens delimited by \n
 Condition
-    ln && n < MAX_LINES ===> ln isn't \0 AND n < MAX_LINES
+    ln && n < MAX_LINES ===> ln isn't NULL AND n < MAX_LINES
 Update
     ln = strtok(NULL, "\n") ===> get next token
-
 - The loop adds each token as an element of the parts array
 - Assigns parts array and n as fields of LineView
-=======================================================================================
+
+CRASH CAUSE ============================================================================
+parts is local variable residing in split_line's stack frame. 
+even if we assign out->lines to point to that address.
+the stack frame is later filled with garbage after split_lines function is finished.
+Need to either 
+    1) malloc out out->lines
+    or 2) assign straight to a variable that is in main's stack frame
+    I did (1) because it was easier
 */
-
-
-
 
 
 /* split_lines 가 쓰던 스택 프레임을, 같은 모양(char*[8])의 지역 배열로 덮는다.
@@ -96,14 +100,10 @@ static void warm_stack(void) {
     __asm__ volatile("" :: "r"(scratch) : "memory");   /* 최적화 제거 방지 */
 }
 /* WARM_STACK =========================================================================
-- Fills 8 elements of scratch array with value at address '0x4141414141414141ULL'
-
-
-
-
-=======================================================================================
+- Fills 8 elements of scratch array with value '0x4141414141414141ULL' at each slot
+- Function is to fill stack that was used by split_lines(approx. size of [MAX_LINES]) with garbage
+to make the error more evident.
 */
-
 
 
 int main(void) {
@@ -117,7 +117,7 @@ int main(void) {
     long checksum = 0;
     for (int i = 0; i < v.count; i++)
         checksum += (unsigned char)v.lines[i][0]; // ⚠️ Program crashes here
-
     printf("lines = %d, checksum = %ld\n", v.count, checksum);
+    free(v.lines);
     return 0;
 }

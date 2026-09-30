@@ -51,21 +51,20 @@ static void cfg_set(Config *c, const char *k, const char *v) {
 }
 
 static const char *cfg_get(const Config *c, const char *k) {
-    for (int i = 0; i < (c->n); i++)  // Why (c->n)-1??? why ignore the last key?
+    for (int i = 0; i < (c->n); i++)
         if (strcmp(c->keys[i], k) == 0) return c->vals[i];
-        /* STRCMP ================================================================
-        int strcmp(const char *s1, const char *s2) — compares two strings
-            Return 0 = strings are exactly equal
-            Return positive = s1 comes before s2 alphabetically, roughly
-            Return negative = s1 comes after s2 alphabetically, roughly
-
-        Find if any of the elements in c->keys match k. 
-        If match, return the element with the same index in c->vals
-        If no match, return NULL
-        */
     return NULL;                       /* 없는 키 → NULL */
 }
+/* STRCMP ================================================================
+int strcmp(const char *s1, const char *s2) — compares two strings
+    Return 0 = strings are exactly equal
+    Return positive = s1 comes after s2 alphabetically, roughly
+    Return negative = s1 comes before s2 alphabetically, roughly
 
+Find if any of the elements in c->keys match k. 
+If match, return the element with the same index in c->vals
+If no match, return NULL
+*/
 
 
 
@@ -93,17 +92,9 @@ static void expand(const Config *c, const char *tmpl, char *out, size_t outcap) 
             memcpy(key, p + 2, kl); // moves kl number of bytes from (p+2) to char array (key)
             key[kl] = '\0';         // have key end in \0
             const char *v = cfg_get(c, key); // find key in c->keys and return c->vals with the same index
-            // size_t vl = strlen(v);  // Crash happens here
-
-            // New Code
-            size_t vl = 0;
+            // size_t vl = strlen(v);        // ⚠️ Program crashes here
+            size_t vl = 0;                   // Fix : set to vl to 0 and check if return val v is NULL
             if (v != NULL) vl = strlen(v);
-
-            /* CRASH CAUSE ==================================================
-                - v is NULL. can't get strlen(v)
-                - v is NULL because cfg_get couldn't find key in c->key
-                - Only set vl if v is not NULL, otherwise v is 0.
-            */
 
             if (o + vl < outcap) { 
                 memcpy(out + o, v, vl); // move vl number of bytes from v to out+o
@@ -117,7 +108,11 @@ static void expand(const Config *c, const char *tmpl, char *out, size_t outcap) 
     }
     out[o] = '\0';
 }
-
+/* CRASH CAUSE ==================================================
+    - v is NULL. can't get strlen(v)
+    - v is NULL because cfg_get couldn't find key in c->key
+    - Only set vl if v is not NULL, otherwise v is 0.
+*/
 
 
 

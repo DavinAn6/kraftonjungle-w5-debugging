@@ -86,10 +86,11 @@ static long hist_total(const Histogram *h) {
     return t;
 }
 
+
+
 int main(void) {
     Histogram h = { .data = NULL, .len = 0, .cap = 0 };
     for (int k = 0; k < 200000; k++) hist_add(&h, k);
-
     // Bucket *hot = &h.data[100000];  // Crash cause
     // hot->count = 1;
 

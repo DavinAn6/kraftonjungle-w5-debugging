@@ -40,15 +40,6 @@
  *       by_name 은 "관찰용(빌려온) 인덱스"로 두어 절대 free 하지 않는다.
  */
 
-
-
-/* 
-
-
-
-
-*/
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -134,8 +125,15 @@ static void directory_free(Directory *d) {
         free(d->by_id[i]);                 
     }
     d->count = 0;
+    // for (int i = 0; i < d->count; i++) {     // Crash cause
+    //     free(d->by_name[i]);               
+    // }
 }
-
+/* CRASH CAUSE ==============================================================
+by_name[i] and by_id[i] are pointing to the same struct
+doublefree caused the crash
+Fix : Take out free(d->by_name[i]);
+*/
 
 
 int main(void) {
@@ -154,8 +152,7 @@ int main(void) {
     directory_dump(&dir);
     Rec *r = find_by_id(&dir, 2);
     if (r) printf("lookup id=2 -> %s\n", r->name);
-    directory_free(&dir);
-        // Stack shows error occurred here. Double free at tcache2, triggered SIGSEGV signal
+    directory_free(&dir);   // ⚠️ Program crashes here. Double free at tcache2, triggered SIGABRT signal
     printf("done\n");
     return 0;
 }

@@ -61,7 +61,7 @@ static void audit_add(Audit *a, int id) {
 
 
 static Job *push_job(Job *head, int id, int priority) {
-    Job *n = malloc(sizeof *n);
+    Job *n = malloc(sizeof *n); // sizeof *n is the size of a full Job struct
     if (!n) { perror("malloc"); exit(1); }
     n->id = id;
     n->priority = priority;
@@ -70,9 +70,6 @@ static Job *push_job(Job *head, int id, int priority) {
 }
 /* PUSH_JOB ==========================================================================
 Function call : push_job(head, i, (i * 7) % 10) for i=1~4000
-
-Note : sizeof *n is the size of a full Job struct
-
 Function creates almost a linked list of Job structs
     n->id = i
     n->priority = (i * 7) % 10
@@ -80,7 +77,6 @@ Function creates almost a linked list of Job structs
 
 4000->next = 3999
 3999->next = 3998
-
 Priority —> 7, 4, 1, 8, 5, ...
 */
 
@@ -96,11 +92,12 @@ static Job *filter_jobs(Job *head, int threshold, Audit *audit) {
     Job *cur = head;
     Job *temp;
     while (cur != NULL) {
-        if (cur->priority < threshold) {    // ⚠️ Program crashes here
-            audit_add(audit, cur->id);   
-            temp = cur->next;
-            job_release(cur);   
-            cur = temp;            
+        if (cur->priority < threshold) {    
+            audit_add(audit, cur->id);   // ⚠️ Program crashes here
+            temp = cur->next;            // Fix
+            job_release(cur);            
+            // cur = cur->next;          // ⚠️ Crash Cause
+            cur = temp;                  // Fix
         } else {
             Job *nx = cur->next;
             cur->next = NULL;
@@ -113,24 +110,19 @@ static Job *filter_jobs(Job *head, int threshold, Audit *audit) {
 }
 /* FILTER_JOBS =====================================================================
 Function call : filter_jobs(head, 5, &audit)
+    - head starts at id 4000
+    - audit_add(audit, cur->id) : checks audit capacity and adds cur->id to audit->ids[len]
+    - how can it get cur->next when we just freed cur??
+    For cur->id 4000
+        p cur->priority     0
+        p audit->ids[0]     4000
 
-- head starts at id 4000
-- audit_add(audit, cur->id) : checks audit capacity and adds cur->id to audit->ids[len]
-- how can it get cur->next when we just freed cur??
+CRASH CAUSE :
+    Crashes at next `if (cur->priority < threshold)`
+    Can't access cur at `cur = cur->next` because we just freed it —> UAF
 
-For cur->id 4000
-    p cur->priority     0
-    p audit->ids[0]     4000
-
-Crashes at next if (cur->priority < threshold)
-    Can't access cur because we just freed it
-    But why isn't it crashing at cur->next?
-        free(cur)
-        but there is still trash there..?
-
-걍 임시 객체로 cur->next 저장해두고 cur를 놓아줌
+FIX : Create temporary Job to save cur->next while cur is being freed
 */
-
 
 
 

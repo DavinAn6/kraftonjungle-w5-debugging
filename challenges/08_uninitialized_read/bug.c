@@ -72,13 +72,12 @@ static void dirty_heap(void) {
 }
 
 
-
 static int **make_matrix(void) {
-    int **rows = malloc(ROWS * sizeof(int *));
+    int **rows = calloc(ROWS, sizeof(int *));
     if (!rows) { perror("malloc"); exit(1); }
 
     for (int i = 0; i < ROWS; i += 2) {
-        int *r = malloc(COLS * sizeof(int));
+        int *r = malloc(COLS * sizeof(int)); // Fix
         for (int j = 0; j < COLS; j++) r[j] = i * COLS + j;
         rows[i] = r;
     }
@@ -89,14 +88,15 @@ static int **make_matrix(void) {
 
 static long row_sum(int **rows, int nrows) {
     long total = 0;
-    for (int i = 0; i < nrows; i += 2) {
-        for (int j = 0; j < COLS; j++) {
-            total += rows[i][j];      // ⚠️ Program crashes here
+    for (int i = 0; i < nrows; i++) {   // ⚠️ Program crashes cause
+        if (rows[i] != NULL){
+            for (int j = 0; j < COLS; j++) {
+            total += rows[i][j];        // ⚠️ Program crashes here
+        }
         }
     }
     return total;
 }
-
 
 
 int main(void) {
@@ -109,21 +109,25 @@ int main(void) {
         the odd rows are also not malloced so we have no right to access them in row_sum
     r = 4 int pointers ———> assign to each row
         for all the even number rows, assign as column
-    ======================================================================
     */
 
 
     printf("summing %dx%d matrix...\n", ROWS, COLS);
     long s = row_sum(rows, ROWS);    
-    /* CRASH CAUSE =======================================================
-    Only even rows were malloced but row_sum's outer for loop called on all rows
-    Change update condition from `i++` to `i += 2`. Same as make_matrix
-    ======================================================================
+    /* 
+    CRASH CAUSE ===========================================================
+        Only even rows were malloced but row_sum's outer for loop called on all rows
+
+    FIX ===================================================================
+        1. Changing for loop condition from i++ to i+=2
+        2. Calloc the table, and have row_sum() skip NULL rows
+    
+        For efficiency, 1 is better. For abstraction and separating responsibility, 2 is better.
+        i+=2 works but it works by relying on something row_sum() shouldn't need to know.
     */
     
     
     printf("sum = %ld\n", s);
-
     for (int i = 0; i < ROWS; i += 2) free(rows[i]);
     free(rows);
     return 0;

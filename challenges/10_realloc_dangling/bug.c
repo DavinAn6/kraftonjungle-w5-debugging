@@ -61,7 +61,14 @@ static void eb_init(EditBuffer *e) {
 }
 
 static void eb_snapshot(EditBuffer *e) {
-    if (e->undo_n < MAX_UNDO) e->undo[e->undo_n++] = e->data;
+    // if (e->undo_n < MAX_UNDO) e->undo[e->undo_n++] = e->data;
+
+    // Fix
+    if (e->undo_n < MAX_UNDO) {
+        e->undo[e->undo_n] = malloc(e->cap * sizeof(int));
+        if (!e->undo[e->undo_n]) { perror("malloc"); exit(1); }
+        memcpy(e->undo[e->undo_n++], e->data, e->cap * sizeof(int));
+    }
 }
 
 static void eb_grow(EditBuffer *e, size_t need) {
@@ -81,28 +88,31 @@ static void eb_push(EditBuffer *e, int v) {
 static void eb_free(EditBuffer *e) {
     free(e->data);
     free(e->clipboard);
-    // for (int i = 0; i < e->undo_n; i++) {
-    //     free(e->undo[i]);   // ⚠️ Program crashes here         
-    // }
-    /* CRASH CAUSE ================================================================
-    free(e->data);
-    free(e->clipboard);
     for (int i = 0; i < e->undo_n; i++) {
-        free(e->undo[i]);       
+        free(e->undo[i]);   // ⚠️ Program crashes here         
     }
+    /* 
+    CRASH CAUSE ================================================================
+        free(e->data);
+        free(e->clipboard);
+        for (int i = 0; i < e->undo_n; i++) {
+            free(e->undo[i]);       
+        }
 
-    p i                 0
-    p e->undo[0]        (int *) 0x5555555592a0
-    p *(e->undo[0])     1431655769
+        p i                 0
+        p e->undo[0]        (int *) 0x5555555592a0
+        p *(e->undo[0])     1431655769
 
-        No need to free undo
-        Only data and clipboard wre malloced
+    FIX ========================================================================
+        undo[0] held the old data address
+        realloc already freed that block when it moved the buffer. So eb_free() freed it a second time.
+        When assigning to undo in eb_snapshot, don't assign the original pointer. 
+        New malloc then copy memory of e->data.
+        Leave free(e->undo[i])
     */
     e->undo_n = 0;
     e->data = NULL;
 }
-
-
 
 
 int main(void) {

@@ -76,10 +76,10 @@ static void parse_row(Row *r, const char *csv) {
     strtok : returns pointers into the original string. no new memory allocation
     
     FOR LOOP 
-    1. Create tok(token created by delimiting base with ",")
-    2. Save tok as an element of r->fields (an array of char pointers)
-    3. If tok is not '\0' and n is less than capacity continue
-    4. Update tok to be next token
+        1. Create tok(token created by delimiting base with ",")
+        2. Save tok as an element of r->fields (an array of char pointers)
+        3. If tok is not '\0' and n is less than capacity continue
+        4. Update tok to be next token
 
     fields end up being {"id", "name", "dept", "salary"}
     */
@@ -102,10 +102,10 @@ static void row_free(Row *r) {
     r->n = 0;
 }
 /* CRASH CAUSE ==============================================================
-No need to free every element of fields
-They all point to some char in base. Just free base
-Also freeing a token is undefined behavior. 
-free() must be given the exact address that malloc originally returned
+    1. No need to free every element of fields
+        The tokens are pointers to different chars within base. Just free base
+    2. Also freeing a token is undefined behavior. 
+        free() must be given the exact address that malloc originally returned
 */
 
 
@@ -113,7 +113,6 @@ int main(void) {
     Row r;
     parse_row(&r, "id,name,dept,salary");
     row_print(&r);
-
     row_free(&r);             // ⚠️ Program crashes from row_free function
     printf("done\n");
     return 0;

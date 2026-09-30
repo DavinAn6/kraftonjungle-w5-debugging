@@ -79,7 +79,7 @@ static void list_ensure(IntList *l, size_t need) {
     while (newcap < need) newcap *= 2;
         // If the doubled capacity is still less than the needed space,
         // keep doubling
-    int *p = realloc(l->data, newcap * sizeof(int));
+    int *p = realloc(l->data, newcap * sizeof(int));    // ⚠️ Program crashes cause
         // realloc(pointer, new size)
     if (!p) { perror("realloc"); free(l->data); exit(1); }
         // realloc returns NULL if failed (when there is not enough memory anywhere)

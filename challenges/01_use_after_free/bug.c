@@ -132,6 +132,7 @@ static void screen_add(Screen *s, Widget *w) {
 static void screen_dispatch(Screen *s, int code) {
     for (int i = 0; i < s->count; i++) {
         Widget *w = s->items[i];
+        if (w == NULL) continue;
         w->vtbl->on_event(w, code);
     }
 }
@@ -139,17 +140,25 @@ static void screen_dispatch(Screen *s, int code) {
 static void screen_render(Screen *s) {
     for (int i = 0; i < s->count; i++) {
         Widget *w = s->items[i];
-        w->vtbl->render(w);      // Crash happens here 
+        // w->vtbl->render(w);      // ⚠️ Program crashes here
+
+        // New Code
+        if (w == NULL) continue;
+        if (w->closed) {
+            widget_destroy(w);
+            s->items[i] = w = NULL;
+        } else {
+            w->vtbl->render(w); 
+        }
+        
     }
 }
-
-
 
 
 static void dialog_on_event(Widget *self, int code) {
     if (code == 1) {
         self->closed = 1;
-        // widget_destroy(self);   // this line frees the widget and triggers UAF when called again later
+        // widget_destroy(self);   // ⚠️ Program crashes cause
     }
 }
 
@@ -164,7 +173,6 @@ static char *app_build_status(const char *text) {
      */
     memset(msg, 0xAB, sizeof(Widget));
     snprintf(msg, sizeof(Widget), "STATUS: %s", text);
-
     return msg;
 }
 
@@ -213,6 +221,16 @@ int main(void) {
     */
 
     free(status);
-    for (int i = 0; i < s.count; i++) free(s.items[i]);
+    for (int i = 0; i < s.count; i++) {
+        if (s.items[i] != NULL) {
+            widget_destroy(s.items[i]);
+            s.items[i] = NULL;
+        }
+    }
     return 0;
 }
+/* CRASH CAUSE =============================================================================
+dialog_on_event frees the widget with id 12 but the second screen_render references the widget again
+Fix by using 'closed' flag to free and NULL the widget within the screen_render function
+Also add `if (w == NULL) continue;` at screen_dispatch and screen_render to check for NULL widget
+*/
